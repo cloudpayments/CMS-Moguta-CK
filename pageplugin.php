@@ -73,12 +73,64 @@
             </div>
             <div class="row">
                 <div class="large-6 columns">
+                    <span>Способ расчета:</span>
+                </div>
+                <div class="large-6 columns">
+                    <select name="method">
+                        <option value="0" <?php echo ($options['method'] == '0' ? 'selected' : ''); ?>>Неизвестный способ расчета</option>
+                        <option value="1" <?php echo ($options['method'] == '1' ? 'selected' : ''); ?>>Предоплата 100%</option>
+                        <option value="2" <?php echo ($options['method'] == '2' ? 'selected' : ''); ?>>Предоплата</option>
+                        <option value="3" <?php echo ($options['method'] == '3' ? 'selected' : ''); ?>>Аванс</option>
+                        <option value="4" <?php echo ($options['method'] == '4' ? 'selected' : ''); ?>>Полный расчёт</option>
+                        <option value="5" <?php echo ($options['method'] == '5' ? 'selected' : ''); ?>>Частичный расчёт и кредит</option>
+                        <option value="6" <?php echo ($options['method'] == '6' ? 'selected' : ''); ?>>Передача в кредит</option>
+                        <option value="7" <?php echo ($options['method'] == '7' ? 'selected' : ''); ?>>Оплата кредита</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="large-6 columns">
+                    <span>Предмет расчета:</span>
+                </div>
+                <div class="large-6 columns">
+                    <select name="object">
+                        <option value="0" <?php echo ($options['object'] == '0' ? 'selected' : ''); ?>>Неизвестный предмет оплаты</option>
+                        <option value="1" <?php echo ($options['object'] == '1' ? 'selected' : ''); ?>>Товар</option>
+                        <option value="2" <?php echo ($options['object'] == '2' ? 'selected' : ''); ?>>Подакцизный товар</option>
+                        <option value="3" <?php echo ($options['object'] == '3' ? 'selected' : ''); ?>>Работа</option>
+                        <option value="4" <?php echo ($options['object'] == '4' ? 'selected' : ''); ?>>Услуга</option>
+                        <option value="5" <?php echo ($options['object'] == '5' ? 'selected' : ''); ?>>Ставка азартной игры</option>
+                        <option value="6" <?php echo ($options['object'] == '6' ? 'selected' : ''); ?>>Выигрыш азартной игры</option>
+                        <option value="7" <?php echo ($options['object'] == '7' ? 'selected' : ''); ?>>Лотерейный билет</option>
+                        <option value="8" <?php echo ($options['object'] == '8' ? 'selected' : ''); ?>>Выигрыш лотереи</option>
+                        <option value="9" <?php echo ($options['object'] == '9' ? 'selected' : ''); ?>>Предоставление РИД</option>
+                        <option value="10" <?php echo ($options['object'] == '10' ? 'selected' : ''); ?>>Платеж</option>
+                        <option value="11" <?php echo ($options['object'] == '11' ? 'selected' : ''); ?>>Агентское вознаграждение</option>
+                        <option value="12" <?php echo ($options['object'] == '12' ? 'selected' : ''); ?>>Составной предмет расчета</option>
+                        <option value="13" <?php echo ($options['object'] == '13' ? 'selected' : ''); ?>>Иной предмет расчета</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="large-6 columns">
                     <span>Способы оплаты:</span><br><a id="clearPayment">Очистить</a>
                 </div>
                 <div class="large-6 columns">
                     <select name="payment_enable" multiple size="10">
                       <?php foreach($paymentVariants as $key => $value): ?>
                           <option value="<?php echo $key; ?>"<?php if(in_array($key, $options['payment_enable'])) echo " selected" ?>><?php echo $value; ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="large-6 columns">
+                    <span>Статусы заказа для печати второго чека:</span><br><a id="clearRefundStatus">Очистить</a>
+                </div>
+                <div class="large-6 columns">
+                    <select name="status_delivered" multiple size="10">
+                      <?php foreach($statusVariants as $key => $value): ?>
+                          <option value="<?php echo $key; ?>"<?php if(in_array($key, $options['status_delivered'])) echo " selected" ?>><?php echo $value; ?></option>
                       <?php endforeach; ?>
                     </select>
                 </div>

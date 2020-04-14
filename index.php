@@ -4,7 +4,7 @@
 	Plugin Name: CloudKassir: Сервис онлайн кассы
 	Description: Плагин позволяет интегрировать онлайн-кассу CloudKassir в интернет-магазин.
 	Author: CloudPayments
-	Version: 1.0.0
+	Version: 1.2.0
  */
 
 new cloudkassir;
@@ -12,6 +12,7 @@ new cloudkassir;
 class cloudkassir
 {
   const RECEIPT_TYPE_INCOME = 'Income';
+  const RECEIPT_TYPE_INCOME_DELIVERY = 'Income_delivery';
   const RECEIPT_TYPE_INCOME_RETURN = 'IncomeReturn';
 
   private static $pluginName = ''; // название плагина (соответствует названию папки)
@@ -26,11 +27,11 @@ class cloudkassir
     mgAddAction(__FILE__, array(__CLASS__, 'pageSettingsPlugin')); //Настройки плагина
     mgAddAction('Controllers_Payment_actionWhenPayment', array(__CLASS__, 'hookPayment'), 1);//хук плагина
     mgAddAction('Models_Order_updateOrder', array(__CLASS__, 'hookRefund'), 1);//хук плагина
-
+    
     self::$pluginName = PM::getFolderPlugin(__FILE__);//имя плагина
     self::$path = PLUGIN_DIR . self::$pluginName;//папка плагина
   }
-
+  
   static function activate()
   {
 
@@ -61,7 +62,7 @@ class cloudkassir
 
   static function preparePageSettings()
   {
-    //перед генераццией страницы настроек плагина
+    //перед генерацией страницы настроек плагина
     echo '   
 			<link rel="stylesheet" href="' . SITE . '/' . self::$path . '/css/style.css" type="text/css" />
 		 
@@ -161,13 +162,14 @@ class cloudkassir
    */
   private static function requestOrderReceipt($orderId, $options, $type = self::RECEIPT_TYPE_INCOME)
   {
-    $order = DB::query("SELECT `id`, `number`, `user_email`, `phone`, `order_content`, `number`, `delivery_cost` 
+    $order = DB::query("SELECT `id`, `number`, `user_email`, `phone`, `order_content`, `number`, `summ`, `delivery_cost` 
 					FROM `" . PREFIX . "order` WHERE `id` = " . $orderId);
 
     $order = DB::fetchAssoc($order);
     $order['order_content'] = unserialize(stripslashes($order['order_content']));
 
     $order['phone'] = substr(preg_replace('~\D~', '', $order['phone']), 1);
+    
     $receipt = array(
       'Items' => array(),
       'taxationSystem' => $options['taxation_system'],
@@ -175,7 +177,21 @@ class cloudkassir
       'email' => $order['user_email'],
       'phone' => $order['phone']
     );
-
+    if (floatval($order['delivery_cost']) > 0) {
+        $amount = floatval($order['delivery_cost']) + floatval($order['summ']);
+    }
+    else $amount = floatval($order['summ']);
+    if ($type == 'Income_delivery') {
+        $kassa_method = 4;
+        $Payment_sign = 'Income';
+        $receipt['amounts']['advancePayment'] = $amount;
+    }
+    else {
+        $kassa_method = (float)$options['method'];
+        $Payment_sign = $type;
+        $receipt['amounts']['electronic'] = $amount;
+    }
+    
     $vat = substr($options['vat'], 4); //Удаляем vat_
     if ($vat == 'none') {
       $vat = '';
@@ -184,7 +200,7 @@ class cloudkassir
     if ($vat_delivery == 'none') {
       $vat_delivery = '';
     }
-
+    
     foreach ($order['order_content'] as $item) {
 
       $tmp = explode(PHP_EOL, $item['name']);
@@ -194,7 +210,9 @@ class cloudkassir
         'price' => floatval($item['price']),
         'quantity' => floatval($item['count']),
         'amount' => floatval($item['price']) * floatval($item['count']),
-        'vat' => $vat
+        'vat' => $vat,
+        'method' => $kassa_method,
+        'object' => (float)$options['object'],
       );
 
       $receipt['Items'][] = $item;
@@ -206,14 +224,16 @@ class cloudkassir
         'price' => floatval($order['delivery_cost']),
         'quantity' => 1,
         'amount' => floatval($order['delivery_cost']),
-        'vat' => $vat_delivery
+        'vat' => $vat_delivery,
+        'method' => $kassa_method,
+        'object' => 4,
       );
       $receipt['Items'][] = $item;
     }
 
     $response = self::makeRequest('kkt/receipt', array(
       'Inn' => $options['inn'],
-      'Type' => $type,
+      'Type' => $Payment_sign,
       'CustomerReceipt' => $receipt,
       'InvoiceId' => $order['number'],
       'AccountId' => $order['user_email'],
@@ -272,13 +292,16 @@ class cloudkassir
       case self::RECEIPT_TYPE_INCOME:
         $allow = empty($lastAction);
         break;
-      case self::RECEIPT_TYPE_INCOME_RETURN:
-        $allow = $lastAction == self::RECEIPT_TYPE_INCOME;
+      case self::RECEIPT_TYPE_INCOME_DELIVERY:
+        $allow = $lastAction === self::RECEIPT_TYPE_INCOME;
         break;
+      case self::RECEIPT_TYPE_INCOME_RETURN:
+        $allow = $lastAction === self::RECEIPT_TYPE_INCOME ||
+        $allow = $lastAction === self::RECEIPT_TYPE_INCOME_DELIVERY;
+        break;    
       default:
         $allow = false;
     }
-
     return $allow;
   }
 
@@ -299,26 +322,38 @@ class cloudkassir
     if ($ok) {
       self::requestOrderReceipt($args['args']['paymentOrderId'], $options, self::RECEIPT_TYPE_INCOME);
     }
+    return $args;
   }
 
   static function hookRefund($args)
   {
     //функция хука
     $ok = isset($args['args']) ? true : false;
-
-    if ($ok) {
-      $ok = self::checkAllowAction($args['args'][0]['id'], self::RECEIPT_TYPE_INCOME_RETURN);
-    }
-
+    
     if ($ok) {
       $options = unserialize(stripslashes(MG::getSetting('cloudkassirOption')));
-      $ok = in_array($args['args'][0]['status_id'], $options['status_refund']) &&
-        in_array($args['args'][0]['payment_id'], $options['payment_enable']);
+      
+      if ($args['args'][0]['status_id'] == $options['status_delivered'][0] && ($options['method'] ==1 || $options['method'] ==2 || $options['method'] ==3)) {
+        $ok = self::checkAllowAction($args['args'][0]['id'], self::RECEIPT_TYPE_INCOME_DELIVERY);
+      }
+      else $ok = self::checkAllowAction($args['args'][0]['id'], self::RECEIPT_TYPE_INCOME_RETURN);
     }
 
     if ($ok) {
-      self::requestOrderReceipt($args['args'][0]['id'], $options, self::RECEIPT_TYPE_INCOME_RETURN);
+        
+        $order = DB::query("SELECT `payment_id` FROM `" . PREFIX . "order` WHERE `id` = " . $args['args'][0]['id']);
+        $order = DB::fetchAssoc($order);
+        
+      $ok = (in_array($args['args'][0]['status_id'], $options['status_refund']) && in_array($order['payment_id'], $options['payment_enable']))
+      || (in_array($args['args'][0]['status_id'], $options['status_delivered']) && in_array($order['payment_id'], $options['payment_enable']));
     }
+    if ($ok) {
+        if ($args['args'][0]['status_id'] == $options['status_delivered'][0]) {
+            self::requestOrderReceipt($args['args'][0]['id'], $options, self::RECEIPT_TYPE_INCOME_DELIVERY);
+        }
+        else self::requestOrderReceipt($args['args'][0]['id'], $options, self::RECEIPT_TYPE_INCOME_RETURN);
+    }
+    return $args;
   }
 }
 
